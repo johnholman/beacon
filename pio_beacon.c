@@ -1,23 +1,8 @@
 /**
- * 
- * beacon
- * 
- * One state machine (burst) is responsible for generating the burst sequence. It signals to a second state machine
- * responsibe for generating the 38Hz carrier by setting the burst GPIO. This is not ideal but seems impossible to use
- * interrupt flags for this purpose as you cannot read them only set them or wait upon them
- * 
- * The burst SM clock is slowed to 3200 Hz, so each PIO cycle lasts 5/16 ms and delay is implemented by looping round
- * nop [31] instructions each taking 5/16 * 32 ms = 10 ms. Exact timing isn't required so time take by instructions other
- * than nop [31] are ignored here.
- * 
- * The current sequence consists of 180 ms burst followed by 500 ms recovery. 
- * 
- * Before each sequence the RX FIFO is checked for a command from the system. 1 means repeat the burst sequence. 0 means
- * no output.
- * 
- * The second state machine (carrier) outputs a 38 kHz square wave on the output pin when the burst pin is 1.
- *  
- * v0.1  14 Nov 23
+ * Beacon - firmware for an IR emitting beacon 
+ *    
+ * v0.1,  14 Nov 23 - initial version generates basic 180ms on 500ms bursts of 38 kHz carrier but no short pulses
+ * v0.2,  14 Nov 23 - 
  */
 
 #include <stdio.h>
@@ -74,19 +59,21 @@ static void msg_data_cb(void *arg, const u8_t *data, u16_t len, u8_t flags)
        See MQTT_VAR_HEADER_BUFFER_LEN)  */
 
     if (len == 1) {
-        char cmd = (char)data[0];
-        if (cmd == '0') {
-            state = 0;
+        u8_t cmd = data[0] - '0';
+        printf("command %u received\n", cmd);
+        
+        if (cmd == 0) {
+            state = cmd;
             gpio_put(STATUS_GPIO, 0);
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-            puts("beacon switched off");
-        } else if (cmd == '1') {
-            state = 1;
+            puts("beacon off\n");
+        } else if (cmd >=  1 && cmd <= 9) {
+            state = cmd;
             gpio_put(STATUS_GPIO, 1);
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-            puts("beacon switched on");
+            puts("beacon on\n");
         } else {
-            printf("bad command %c\n", cmd);
+            printf("bad command %u\n", cmd);
         }
     } else {
         printf("bad message length\n");

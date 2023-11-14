@@ -10,19 +10,17 @@ off:
     jmp !y off
 
 .program burst
-; generate bursts of 180 ms on 500 ms off when the last command was non-zero, no output otherwise
-
+; generate bursts of 180 ms followed by 500 ms recovery period if the current command is non-zero, no output otherwise
+; follows the 180ms burst with series of n-1 bursts 10ms off 10ms on where n is the command number before starting recovery
 set pins, 0 ; start with carrier off
 .wrap_target
 check:
-    ; check FIFO until there's a non-zero incoming system command
+    ; check FIFO until a non-zero command appears
     pull noblock
-    mov x, osr
-    mov isr, x
-    push noblock
+    mov x, osr  ; x contains command from the system
     jmp !x check
 
-; burst for 180 ms
+; output burst for 180 ms
     set pins, 1 ; switch carrier on
 ; delay for 180 ms
     set y, 17
@@ -30,7 +28,25 @@ on_delay:
     nop [31]
     jmp y-- on_delay
 
-; turn off for recovery period of 500 ms
+; generate n-1 short pulses 
+    ; command in x is one more than required number of short pulses
+	; decrement to get the required number while x still holds the current command
+    mov y, x    
+	jmp y-- ll
+ll:
+    ; start recovery period if we don't want any short pulses
+    jmp !y recovery
+
+    ; decrement again as we'll go round the loop y+1 times
+    jmp y-- bursts
+bursts:	
+    ; each pulse is 10 ms on 10s off
+	set pins, 0 [30]
+    set pins, 1 [31]
+    jmp y-- bursts
+
+; turn off for the recovery period of 500 ms
+recovery:
     set pins, 0 ; switch carrier off
 ; delay for 500 ms
     set y, 24
