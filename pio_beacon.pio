@@ -1,0 +1,87 @@
+.program carrier
+; outputs a 38 kHz square wave on the output in when the input (burst) pin is high
+on:
+    set pins, 1 [9]
+off:	
+	set pins, 0 [5]
+    in null 32
+    in pins 1
+    mov y, isr
+    jmp !y off
+
+.program burst
+; generate bursts of 180 ms on 500 ms off when the last command was non-zero, no output otherwise
+
+set pins, 0 ; start with carrier off
+.wrap_target
+check:
+    ; check FIFO until there's a non-zero incoming system command
+    pull noblock
+    mov x, osr
+    mov isr, x
+    push noblock
+    jmp !x check
+
+; burst for 180 ms
+    set pins, 1 ; switch carrier on
+; delay for 180 ms
+    set y, 17
+on_delay:
+    nop [31]
+    jmp y-- on_delay
+
+; turn off for recovery period of 500 ms
+    set pins, 0 ; switch carrier off
+; delay for 500 ms
+    set y, 24
+off_delay:
+    nop [31]
+    nop [31]
+    jmp y-- off_delay
+.wrap    
+
+% c-sdk {
+static inline void burst_program_init(PIO pio, uint sm, uint offset, uint pin) {
+    pio_sm_config c = burst_program_get_default_config(offset);
+
+    // Map the state machine's OUT pin group to one pin, namely the `pin`
+    // parameter to this function.
+    //    sm_config_set_out_pins(&c, pin, 1);
+    sm_config_set_set_pins(&c, pin, 1);
+    // Set this pin's GPIO function (connect PIO to the pad)
+    pio_gpio_init(pio, pin);
+    // Set the pin direction to output at the PIO
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
+
+    // Load our configuration, and jump to the start of the program
+    pio_sm_init(pio, sm, offset, &c);
+
+    // Set the state machine running
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void carrier_program_init(PIO pio, uint sm, uint offset, uint out_pin, uint in_pin) {
+    pio_sm_config c = carrier_program_get_default_config(offset);
+
+    // Map the state machine's OUT pin group to one pin, namely the `pin`
+    // parameter to this function.
+    sm_config_set_set_pins(&c, out_pin, 1);
+    // Set this pin's GPIO function (connect PIO to the pad)
+    pio_gpio_init(pio, out_pin);
+    // Set the pin direction to output at the PIO
+    pio_sm_set_consecutive_pindirs(pio, sm, out_pin, 1, true);
+
+    // configure the IN pin group to be just the input pin 
+    //    sm_config_set_out_pins(&c, in_pin, 1);
+    sm_config_set_in_pins(&c, in_pin);
+    // Set this pin's GPIO function (connect PIO to the pad)
+    pio_gpio_init(pio, in_pin);
+    
+    // Load our configuration, and jump to the start of the program
+    pio_sm_init(pio, sm, offset, &c);
+
+    // Set the state machine running
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+%}
