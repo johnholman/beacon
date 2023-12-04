@@ -10,54 +10,43 @@ off:
     jmp !y off
 
 .program burst
-; generate bursts of 180 ms followed by 500 ms recovery period if the current command is non-zero, no output otherwise
+; generate a burstof 180 ms followed by 500 ms recovery period if the current command is non-zero, no output otherwise
 ; follows the 180ms burst with series of n-1 bursts 10ms off 10ms on where n is the command number before starting recovery
 set pins, 0 ; start with carrier off
 .wrap_target
-check:
-    ; check FIFO until a non-zero command appears
-    pull noblock
-    mov x, osr  ; x contains command from the system
-    jmp !x check
+; get the next command from the TX FIFO - an integer n in [0-9]
+    pull
+    mov x, osr
 
-; generate n-1 short pulses 
-    ; command in x is one more than required number of short pulses
-	; decrement to get the required number while x still holds the current command
+; generate n short bursts each about 3 ms on and 5 ms off
     mov y, x    
-	jmp y-- ll
-ll:
     ; start long burst period if we don't want any short pulses
     jmp !y long
 
-    ; decrement again as we'll go round the loop y+1 times
+    ; decrement y as we'll go round the following loop y+1 times
     jmp y-- bursts
 bursts:	
-    ; each pulse is about 3 ms on 5 ms off
     set pins, 1 [10]
 	set pins, 0 [15]
     jmp y-- bursts
 
-
-; short recovery period of about 100 ms after short pulses
+; now a short recovery period of about 100 ms
     set pins, 0 ; switch carrier off
 ; delay for about 100 ms
+; (might save some instructions by putting [31] on the jmp to follow)
     set y, 10
 post_delay:
     nop [31]
     jmp y-- post_delay
 
-
-
 long:
-; output burst for 180 ms
+; output long burst for 180 ms
     set pins, 1 ; switch carrier on
 ; delay for 180 ms
     set y, 17
 on_delay:
     nop [31]
     jmp y-- on_delay
-
-
 
 ; turn off for the recovery period of 500 ms
 recovery:
@@ -68,6 +57,10 @@ off_delay:
     nop [31]
     nop [31]
     jmp y-- off_delay
+
+; echo command to the RX FIFO to signal completion
+  mov isr, x
+  push
 .wrap    
 
 % c-sdk {
