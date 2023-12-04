@@ -20,6 +20,35 @@ check:
     mov x, osr  ; x contains command from the system
     jmp !x check
 
+; generate n-1 short pulses 
+    ; command in x is one more than required number of short pulses
+	; decrement to get the required number while x still holds the current command
+    mov y, x    
+	jmp y-- ll
+ll:
+    ; start long burst period if we don't want any short pulses
+    jmp !y long
+
+    ; decrement again as we'll go round the loop y+1 times
+    jmp y-- bursts
+bursts:	
+    ; each pulse is about 3 ms on 5 ms off
+    set pins, 1 [10]
+	set pins, 0 [15]
+    jmp y-- bursts
+
+
+; short recovery period of about 100 ms after short pulses
+    set pins, 0 ; switch carrier off
+; delay for about 100 ms
+    set y, 10
+post_delay:
+    nop [31]
+    jmp y-- post_delay
+
+
+
+long:
 ; output burst for 180 ms
     set pins, 1 ; switch carrier on
 ; delay for 180 ms
@@ -28,22 +57,7 @@ on_delay:
     nop [31]
     jmp y-- on_delay
 
-; generate n-1 short pulses 
-    ; command in x is one more than required number of short pulses
-	; decrement to get the required number while x still holds the current command
-    mov y, x    
-	jmp y-- ll
-ll:
-    ; start recovery period if we don't want any short pulses
-    jmp !y recovery
 
-    ; decrement again as we'll go round the loop y+1 times
-    jmp y-- bursts
-bursts:	
-    ; each pulse is 10 ms on 10s off
-	set pins, 0 [30]
-    set pins, 1 [31]
-    jmp y-- bursts
 
 ; turn off for the recovery period of 500 ms
 recovery:
