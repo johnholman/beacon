@@ -1,9 +1,10 @@
-/**
- * Test beacon - firmware for an IR emitting beacon with test patterns
+/*
+ * Beacon - firmware for an IR emitting beacon
  *    
  * v0.1,  14 Nov 23 - generates 180 ms on 500 ms off bursts of 38 kHz carrier
  * v0.2,  27 Nov 23 - includes short data pulses followed by 100 ms recovery before the 180 ms pulse
  * v0.3,   4 Dec 23 - support continuous and single transmission "flash" modes
+ * v0.4,   5 Dec 23 - support for local transmission control
  */
 
 #include <stdio.h>
@@ -22,6 +23,8 @@
 #include "lwip/apps/mqtt_priv.h"
 #include "lwip/apps/mqtt.h"
 
+#define BUTTON_GPIO 14
+
 // GPIO to drive IR emitter with bursts of 38Hz carrier
 #define OUTPUT_GPIO 15
 
@@ -30,6 +33,7 @@
 
 // GPIO reflecting whether in continuous mode
 #define STATUS_GPIO 17
+
 
 mqtt_client_t client;
 bool connected = false;
@@ -203,6 +207,10 @@ int main() {
     gpio_init(BURST_GPIO);
     gpio_set_dir(BURST_GPIO, GPIO_OUT);
 
+    gpio_init(BUTTON_GPIO);
+    gpio_set_dir(BUTTON_GPIO, GPIO_IN);
+    gpio_pull_up(BUTTON_GPIO);
+
     if (cyw43_arch_init()) {
         printf("failed to initialise\n");
         return 1;
@@ -270,7 +278,9 @@ int main() {
 
     uint32_t ret;
     while (true) {
-        if (flash_now || continuous) {
+        bool button_pressed = !gpio_get(BUTTON_GPIO);
+        // printf("button pressed %s\n", button_pressed? "true" : "false");
+        if (flash_now || continuous || button_pressed) {
           flash_now = false;
           printf("requesting flash with data %d\n", nshort);
           pio_sm_put_blocking(pio, burst_sm, nshort);
