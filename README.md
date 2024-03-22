@@ -5,13 +5,15 @@ Beacon - firmware for an IR emitting beacon that supports distance estimation by
  
  The following commands are supported:
 
+ i<id> - set public id to <id>. The beacon subscribes to topic <id> where is is a (shortish) string
+
  c - continuous mode on (default). The beacon transmits a continuous series of flashes
 
  n - continuous mode off.  The beacon transmits only in response to the f command
 
  f - send a single flash. This is ignored if the beacon is in continuous mode.
 
- 0-9 - set the data to be sent in subsequent flashes. Default is 0.
+ d<n> - set the data to be sent - i.e. the number short flashes in a burst. Default is 0.
 
 Each transmission ("flash") consists of a sequence of bursts of 38 kHz carrier frequency output on the output GPIO. The sequence starts with a series of short bursts, each of duration about 3 ms with 5 ms inter-burst gap, that communicate the data (a number between and 9). The last short burst is followed by a recovery period of about 100 ms. A 180ms burst follows to allow the TSP58P38 IR sensor to estimate irradiance and therefore distance. The sequence finishes with a 
  recovery period of 500 ms.

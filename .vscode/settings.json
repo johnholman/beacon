@@ -28,5 +28,6 @@
     "time.h": "c",
     "pico.h": "c",
     "inet.h": "c"
-  }
+  },
+  "cortex-debug.variableUseNaturalFormat": true
 }
