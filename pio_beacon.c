@@ -1,14 +1,16 @@
 /*
  * Beacon - firmware for an IR emitting beacon
  *
- * v0.1,  14 Nov 23 - generates 180 ms on 500 ms off bursts of 38 kHz carrier
- * v0.2,  27 Nov 23 - includes short data pulses followed by 100 ms recovery before the 180 ms pulse
- * v0.3,   4 Dec 23 - support continuous and single transmission "flash" modes
- * v0.4,   5 Dec 23 - support for local transmission control
- * v0.5,  20 Mar 24 - publish internal id on announcement message
- *                  - support command to subscribe to new "public id" topic for future commands
+ * 0.1,  14 Nov 23 - generates 180 ms on 500 ms off bursts of 38 kHz carrier
+ * 0.2,  27 Nov 23 - includes short data pulses followed by 100 ms recovery before the 180 ms pulse
+ * 0.3,   4 Dec 23 - support continuous and single transmission "flash" modes
+ * 0.4,   5 Dec 23 - support for local transmission control
+ * 0.5,  20 Mar 24 - publish internal id on announcement message
+ *                  - add "id" command (i) to subscribe to new "public id" topic for future commands
  *                  - support commands with a parameter
- *                  - parameterise the "data" (d) command
+ *                  - add "data" (d) command with data value as parameter
+ * 0.6, 23 Mar 24   - default to non-continuous mode
+ *                  - add parameter to flash command to specify accompanying data
  */
 
 #include <stdio.h>
@@ -42,7 +44,7 @@
 mqtt_client_t client;
 bool connected = false;
 
-bool continuous = true; // default is to transmit continuously
+bool continuous = false; // default is to transmit only when flash command received
 uint8_t nshort = 0;     //  without any short pulses
 bool flash_now = false; // set when flash has been requested and not yet actioned
 
@@ -113,14 +115,16 @@ static void msg_data_cb(void *arg, const u8_t *data, u16_t len, u8_t flags)
       }
       else if (cmd == 'd')
       {
-        // set number of short pulses to send with each transmission
+        // set number of short pulses to send with each transmission in continuous mode
         nshort = atoi(param);
         printf("set data to %d\n", nshort);
         // nshort = arg - '0';
       }
       else if (cmd == 'f')
       {
-        // flash once when not in continuous mode
+        // flash once when not in continuous mode with requested data encoded as the 
+        // number of short flashes
+        nshort = atoi(param);
         flash_now = true;
       }
       else
@@ -250,7 +254,7 @@ int main()
 {
   stdio_init_all();
 
-  puts("beacon v0.5 - TBD");
+  puts("beacon v0.6, 23 Mar 24");
 
   uint8_t iid[8];
   flash_get_unique_id(iid);
