@@ -11,6 +11,7 @@
  *                  - add "data" (d) command with data value as parameter
  * 0.6, 23 Mar 24   - default to non-continuous mode
  *                  - add parameter to flash command to specify accompanying data
+ * 0.7, 24 Mar 24   - minor tidying, set QOS to 0 (was 2)
  */
 
 #include <stdio.h>
@@ -30,12 +31,14 @@
 #include "lwip/apps/mqtt_priv.h"
 #include "lwip/apps/mqtt.h"
 
+// GPIO for manually eliciting a flash
 #define BUTTON_GPIO 14
 
 // GPIO to drive IR emitter with bursts of 38Hz carrier
 #define OUTPUT_GPIO 15
 
 // GPIO for burst generator PIO SM (tx_pio) to signal bursts to carrier generating PIO (rx_pio)
+// also used to drive LED indicating that a burst is in progress
 #define BURST_GPIO 16
 
 // GPIO reflecting whether in continuous mode
@@ -45,8 +48,8 @@ mqtt_client_t client;
 bool connected = false;
 
 bool continuous = false; // default is to transmit only when flash command received
-uint8_t nshort = 0;     //  without any short pulses
-bool flash_now = false; // set when flash has been requested and not yet actioned
+uint8_t nshort = 0;      //  without any short pulses
+bool flash_now = false;  // set when flash has been requested and not yet actioned
 
 static void mqtt_sub_request_cb(void *arg, err_t result)
 {
@@ -56,7 +59,8 @@ static void mqtt_sub_request_cb(void *arg, err_t result)
   printf("Subscribe result: %d\n", result);
 }
 
-void subscribe(char *topic) {
+void subscribe(char *topic)
+{
   printf("subscribing to topic %s\n", topic);
   // note no locking needed as in a callback
   int err = mqtt_subscribe(&client, topic, 1, mqtt_sub_request_cb, "");
@@ -88,7 +92,6 @@ static void msg_data_cb(void *arg, const u8_t *data, u16_t len, u8_t flags)
       char param[20];
       memcpy(param, data + 1, len - 1);
       param[len - 1] = '\0';
-      // const char *arg = (char *)data + 1;
       printf("command %c param %s\n", cmd, param);
 
       if (cmd == 'c')
@@ -122,7 +125,7 @@ static void msg_data_cb(void *arg, const u8_t *data, u16_t len, u8_t flags)
       }
       else if (cmd == 'f')
       {
-        // flash once when not in continuous mode with requested data encoded as the 
+        // flash once when not in continuous mode with requested data encoded as the
         // number of short flashes
         nshort = atoi(param);
         flash_now = true;
@@ -155,21 +158,10 @@ static void mqtt_connection_cb(mqtt_client_t *client, void *id, mqtt_connection_
   /* Setup callback for incoming publish requests */
   mqtt_set_inpub_callback(client, msg_info_cb, msg_data_cb, "");
 
-
   char topic[30];
   snprintf(topic, sizeof(topic), "beacon/%s", id);
-  // printf("subscribing to topic %s\n", topic);
   subscribe(topic);
 
-  // // note no locking needed as in a callback
-  // err = mqtt_subscribe(client, topic, 1, mqtt_sub_request_cb, "");
-
-  // if (err != ERR_OK)
-  // {
-  //   printf("mqtt_subscribe return: %d\n", err);
-  // }
-
-  // connect_broker(client, );
 }
 
 void connect_broker(mqtt_client_t *client, char *broker_ip, char *id)
@@ -181,12 +173,14 @@ void connect_broker(mqtt_client_t *client, char *broker_ip, char *id)
   /* Setup an empty client info structure */
   memset(&ci, 0, sizeof(ci));
 
-  /* Set client name to beacon-N where N is the id */
+  /* Set client name to beacon-N where N is the flash serial number */
   char client_name[30];
   snprintf(client_name, sizeof(client_name), "beacon-%s", id);
   printf("client name: %s\n", client_name);
 
   ci.client_id = client_name;
+  ci.will_topic = "beacon/announce";
+  ci.will_msg = "shut down";
 
   /* Initiate client and connect to server, if this fails immediately an error code is returned
    otherwise mqtt_connection_cb will be called with connection result after attempting
@@ -201,7 +195,7 @@ void connect_broker(mqtt_client_t *client, char *broker_ip, char *id)
   err = mqtt_client_connect(client, &ip_addr, MQTT_PORT, mqtt_connection_cb, id, &ci);
   cyw43_arch_lwip_end();
 
-  /* For now just print the result code if something goes wrong */
+  /* For now just print the result code if something goes wrong without retrying */
   if (err != ERR_OK)
   {
     printf("mqtt_connect request failed with error %d\n", err);
@@ -210,13 +204,9 @@ void connect_broker(mqtt_client_t *client, char *broker_ip, char *id)
   {
     printf("mqtt_connect request returned OK\n");
   }
-
-  // client->keep_alive = 4;
-  // printf("keepalive content: %d\n", client->keep_alive);
 }
 
-
-/* Called when publish is complete either with sucess or failure */
+/* Called when publish is complete either with success or failure */
 static void mqtt_pub_request_cb(void *arg, err_t result)
 {
   if (result != ERR_OK)
@@ -232,8 +222,8 @@ static void mqtt_pub_request_cb(void *arg, err_t result)
 void publish(mqtt_client_t *client, char *topic, char *msg)
 {
   err_t err;
-  u8_t qos = 2;    /* 0 1 or 2, see MQTT specification */
-  u8_t retain = 0; /* No don't retain such crappy payload... */
+  u8_t qos = 0;    /* 0 1 or 2, see MQTT specification */
+  u8_t retain = 0;
 
   printf("publishing %s on topic %s\n", msg, topic);
   // definitely do need to wrap here!
@@ -254,14 +244,14 @@ int main()
 {
   stdio_init_all();
 
-  puts("beacon v0.6, 23 Mar 24");
+  puts("beacon v0.7, 24 Mar 24");
 
   uint8_t iid[8];
   flash_get_unique_id(iid);
   snprintf(internal_id, sizeof(internal_id), "%llx", *(uint64_t *)iid);
 
   // internal_id = *(uint64_t *)iid;
-  printf("unique id %s\n", internal_id);
+  printf("flash memory uid %s\n", internal_id);
 
   // configure pin to reflect whether in continuous mode
   gpio_init(STATUS_GPIO);
@@ -295,12 +285,11 @@ int main()
     printf("IP address: %s\n", ip4addr_ntoa(netif_ip4_addr(netif_list)));
     id = strrchr(ip4addr_ntoa(netif_ip4_addr(netif_list)), '.');
     id++;
-    printf("ID: %s\n", id);
+    printf("old ID: %s\n", id);
   }
 
   connect_broker(&client, "192.168.1.90", internal_id);
-  // connect_broker(&client, "piserv.local", id);
-
+  
   for (;;)
   {
     if (connected)
@@ -310,10 +299,6 @@ int main()
   }
 
   publish(&client, "beacon/announce", internal_id);
-
-  // char announcement[20];
-  // snprintf(announcement, sizeof(announcement), "%s", internal_id);
-  // publish(&client, "beacon/announce", announcement);
 
   // use the first PIO block
   PIO pio = pio0;

@@ -27,7 +27,8 @@
   "files.associations": {
     "time.h": "c",
     "pico.h": "c",
-    "inet.h": "c"
+    "inet.h": "c",
+    "flash.h": "c"
   },
   "cortex-debug.variableUseNaturalFormat": true
 }
