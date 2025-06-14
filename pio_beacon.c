@@ -12,6 +12,7 @@
  * 0.6, 23 Mar 24   - default to non-continuous mode
  *                  - add parameter to flash command to specify accompanying data
  * 0.7, 24 Mar 24   - minor tidying, set QOS to 0 (was 2)
+ * 0.8, 14 Jun 25   - update to SDK 2.1.1 and improve CMakeLists.txt 
  */
 
 #include <stdio.h>
@@ -244,7 +245,9 @@ int main()
 {
   stdio_init_all();
 
-  puts("beacon v0.7, 24 Mar 24");
+  sleep_ms(1000);
+  
+  puts("beacon v0.8, 14 Jun 25");
 
   uint8_t iid[8];
   flash_get_unique_id(iid);

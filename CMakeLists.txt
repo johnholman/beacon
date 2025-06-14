@@ -1,38 +1,36 @@
+# == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
+if(WIN32)
+    set(USERHOME $ENV{USERPROFILE})
+else()
+    set(USERHOME $ENV{HOME})
+endif()
+set(sdkVersion 2.1.1)
+set(toolchainVersion 13_2_Rel1)
+set(picotoolVersion 2.1.1)
+set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+if (EXISTS ${picoVscode})
+    include(${picoVscode})
+endif()
+# ====================================================================================
 # CMakeLists.txt for pico beacon firmware
 
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.13)
+
+set(PICO_BOARD "pico_w" CACHE STRING "Board Type")
 
 # Pull in SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-# include(pico_extras_import_optional.cmake)
-
 project(beacon C CXX ASM)
-
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
-
-# set(PICO_EXAMPLES_PATH ${PROJECT_SOURCE_DIR})
-
-set(PICO_BOARD "pico_w")
-set(WIFI_SSID $ENV{WIFI_SSID})
-set(WIFI_PASSWORD $ENV{WIFI_PASSWORD})
 
 # Initialize the SDK
 pico_sdk_init()
 
-add_compile_options(-Wall
-        -Wno-format          # int != int32_t as far as the compiler is concerned because gcc has int32_t as long int
-        -Wno-unused-function # we have some for the docs that aren't called
-        )
-if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    add_compile_options(-Wno-maybe-uninitialized)
-endif()
-
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(beacon)
-
-pico_generate_pio_header(beacon ${CMAKE_CURRENT_LIST_DIR}/pio_beacon.pio)
 
 target_sources(beacon PRIVATE pio_beacon.c)
 
@@ -45,13 +43,24 @@ target_link_libraries(beacon PRIVATE
         pico_cyw43_arch_lwip_threadsafe_background
         pico_lwip_mqtt
         hardware_pio
+        hardware_flash
         )
 
 target_compile_definitions(beacon PRIVATE
-        WIFI_SSID=\"${WIFI_SSID}\"
-        WIFI_PASSWORD=\"${WIFI_PASSWORD}\"
+        WIFI_SSID="$ENV{WIFI_SSID}"
+        WIFI_PASSWORD="$ENV{WIFI_PASSWORD}"
         )
 
+target_compile_options(beacon PRIVATE -Wall)
+
+pico_generate_pio_header(beacon ${CMAKE_CURRENT_LIST_DIR}/pio_beacon.pio)
+
+pico_enable_stdio_uart(beacon 1)
+pico_enable_stdio_usb(beacon 1)
+
 pico_add_extra_outputs(beacon)
+
+pico_set_program_name(beacon "beacon")
+pico_set_program_version(beacon "0.8")
 
 

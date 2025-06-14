@@ -1,6 +1,6 @@
 Beacon - firmware for an IR emitting beacon that supports distance estimation by the Vishay TSSP58P38 IR proximity sensor
 
-Version 0.7, 24 Mar 24
+Version 0.8, 14 June 25
  
  At startup, the beacon connects to the broker and publishes with topic beacon/announce and payload its flash memory serial number.
 
@@ -21,6 +21,18 @@ Version 0.7, 24 Mar 24
 
  d\<n> - set the data to be sent when in continuous mode  Default is 0. Overridden by any subsequent f
  command.
+
+Example test session:
+
+single flash:
+mosquitto_pub -h piserv.local -t beacon/37ba4ee7034161e6 -m f
+
+set id to jim
+mosquitto_pub -h piserv.local -t beacon/37ba4ee7034161e6 -m "ijim"
+
+single flash with data 5
+mosquitto_pub -h piserv.local -t beacon/jim -m f5
+
 
 Each transmission ("flash") consists of a sequence of bursts of 38 kHz carrier frequency output on the output GPIO. The sequence starts with a series of short bursts, each of duration about 3 ms with 5 ms inter-burst gap whose count constitutes the data associated with the flash. The last short burst is followed by a recovery period of about 100 ms. A 180ms burst follows to allow the TSP58P38 IR sensor to estimate irradiance and therefore distance. The sequence finishes with a recovery period of 500 ms.
   
