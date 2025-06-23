@@ -32,7 +32,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(beacon)
 
-target_sources(beacon PRIVATE pio_beacon.c)
+target_sources(beacon PRIVATE pio_beacon.c wifi_scan.c)
 
 target_include_directories(beacon PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
@@ -51,7 +51,7 @@ target_compile_definitions(beacon PRIVATE
         WIFI_PASSWORD="$ENV{WIFI_PASSWORD}"
         )
 
-target_compile_options(beacon PRIVATE -Wall)
+# target_compile_options(beacon PRIVATE -Wall)
 
 pico_generate_pio_header(beacon ${CMAKE_CURRENT_LIST_DIR}/pio_beacon.pio)
 
@@ -61,6 +61,6 @@ pico_enable_stdio_usb(beacon 1)
 pico_add_extra_outputs(beacon)
 
 pico_set_program_name(beacon "beacon")
-pico_set_program_version(beacon "0.8")
+pico_set_program_version(beacon "1.0")
 
 

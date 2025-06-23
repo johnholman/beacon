@@ -12,7 +12,8 @@
  * 0.6, 23 Mar 24   - default to non-continuous mode
  *                  - add parameter to flash command to specify accompanying data
  * 0.7, 24 Mar 24   - minor tidying, set QOS to 0 (was 2)
- * 0.8, 14 Jun 25   - update to SDK 2.1.1 and improve CMakeLists.txt 
+ * 0.8, 14 Jun 25   - update to SDK 2.1.1 and improve CMakeLists.txt
+ * 1.0, 23 Jun 25   - support multiple wifi networks and pick the best available
  */
 
 #include <stdio.h>
@@ -31,6 +32,8 @@
 #include "lwip/inet.h"
 #include "lwip/apps/mqtt_priv.h"
 #include "lwip/apps/mqtt.h"
+
+#include "wifi_scan.h"
 
 // GPIO for manually eliciting a flash
 #define BUTTON_GPIO 14
@@ -154,6 +157,7 @@ static void mqtt_connection_cb(mqtt_client_t *client, void *id, mqtt_connection_
   else
   {
     printf("mqtt_connection_cb: Disconnected, reason: %d\n", status);
+    return;
   }
 
   /* Setup callback for incoming publish requests */
@@ -162,10 +166,9 @@ static void mqtt_connection_cb(mqtt_client_t *client, void *id, mqtt_connection_
   char topic[30];
   snprintf(topic, sizeof(topic), "beacon/%s", id);
   subscribe(topic);
-
 }
 
-void connect_broker(mqtt_client_t *client, char *broker_ip, char *id)
+void connect_broker(mqtt_client_t *client, const char *broker_ip, char *id)
 {
 
   struct mqtt_connect_client_info_t ci;
@@ -182,6 +185,7 @@ void connect_broker(mqtt_client_t *client, char *broker_ip, char *id)
   ci.client_id = client_name;
   ci.will_topic = "beacon/announce";
   ci.will_msg = "shut down";
+  ci.keep_alive = 60;
 
   /* Initiate client and connect to server, if this fails immediately an error code is returned
    otherwise mqtt_connection_cb will be called with connection result after attempting
@@ -223,7 +227,7 @@ static void mqtt_pub_request_cb(void *arg, err_t result)
 void publish(mqtt_client_t *client, char *topic, char *msg)
 {
   err_t err;
-  u8_t qos = 0;    /* 0 1 or 2, see MQTT specification */
+  u8_t qos = 0; /* 0 1 or 2, see MQTT specification */
   u8_t retain = 0;
 
   printf("publishing %s on topic %s\n", msg, topic);
@@ -246,8 +250,8 @@ int main()
   stdio_init_all();
 
   sleep_ms(1000);
-  
-  puts("beacon v0.8, 14 Jun 25");
+
+  puts("beacon v1.0, 23 Jun 25");
 
   uint8_t iid[8];
   flash_get_unique_id(iid);
@@ -275,9 +279,19 @@ int main()
 
   cyw43_arch_enable_sta_mode();
 
+  const wifi_info_t *netinfo = get_wifi_info();
+  if (netinfo)
+  {
+    printf("network found with ssid %s\n", netinfo->ssid);
+  }
+  else
+  {
+    printf("candidate wifi network not found\n");
+  }
+
   char *id;
   printf("Connecting to Wi-Fi...\n");
-  if (cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASSWORD, CYW43_AUTH_WPA2_AES_PSK, 30000))
+  if (cyw43_arch_wifi_connect_timeout_ms(netinfo->ssid, netinfo->password, CYW43_AUTH_WPA2_AES_PSK, 30000))
   {
     printf("failed to connect.\n");
     return 1;
@@ -291,8 +305,8 @@ int main()
     printf("old ID: %s\n", id);
   }
 
-  connect_broker(&client, "192.168.1.90", internal_id);
-  
+  connect_broker(&client, netinfo->broker, internal_id);
+
   for (;;)
   {
     if (connected)
