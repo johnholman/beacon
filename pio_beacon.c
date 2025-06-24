@@ -32,8 +32,10 @@
 #include "lwip/inet.h"
 #include "lwip/apps/mqtt_priv.h"
 #include "lwip/apps/mqtt.h"
+#include "lwip/dns.h"
 
 #include "wifi_scan.h"
+#include "dns_lookup.h"
 
 // GPIO for manually eliciting a flash
 #define BUTTON_GPIO 14
@@ -168,7 +170,7 @@ static void mqtt_connection_cb(mqtt_client_t *client, void *id, mqtt_connection_
   subscribe(topic);
 }
 
-void connect_broker(mqtt_client_t *client, const char *broker_ip, char *id)
+void connect_broker(mqtt_client_t *client, ip_addr_t *ip_addr, char *id)
 {
 
   struct mqtt_connect_client_info_t ci;
@@ -192,12 +194,12 @@ void connect_broker(mqtt_client_t *client, const char *broker_ip, char *id)
    to establish a connection with the server.
    For now MQTT version 3.1.1 is always used */
 
-  ip_addr_t ip_addr;
-  ipaddr_aton(broker_ip, &ip_addr);
+  // ip_addr_t ip_addr;
+  // ipaddr_aton(broker_ip, &ip_addr);
 
   // wrapping for safety but might not be needed
   cyw43_arch_lwip_begin();
-  err = mqtt_client_connect(client, &ip_addr, MQTT_PORT, mqtt_connection_cb, id, &ci);
+  err = mqtt_client_connect(client, ip_addr, MQTT_PORT, mqtt_connection_cb, id, &ci);
   cyw43_arch_lwip_end();
 
   /* For now just print the result code if something goes wrong without retrying */
@@ -305,14 +307,27 @@ int main()
     printf("old ID: %s\n", id);
   }
 
-  connect_broker(&client, netinfo->broker, internal_id);
+    const char *broker_name = "gl-mt3000.local";
+    static ip_addr_t broker_ip; // IP address of broker
+    int err = dns_lookup(broker_name, &broker_ip);
+
+    if (err)
+    {
+        printf("lookup of %s failed\n", broker_name);
+    }
+    else
+    {
+        printf("%s resolved to address %s\n", broker_name, ipaddr_ntoa(&broker_ip));
+    }
+
+  connect_broker(&client, &broker_ip, internal_id);
 
   for (;;)
   {
     if (connected)
       break;
     puts("not yet connected");
-    sleep_ms(100);
+    sleep_ms(1000);
   }
 
   publish(&client, "beacon/announce", internal_id);

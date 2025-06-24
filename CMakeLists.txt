@@ -32,7 +32,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(beacon)
 
-target_sources(beacon PRIVATE pio_beacon.c wifi_scan.c)
+target_sources(beacon PRIVATE pio_beacon.c wifi_scan.c dns_lookup.c)
 
 target_include_directories(beacon PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
@@ -47,8 +47,9 @@ target_link_libraries(beacon PRIVATE
         )
 
 target_compile_definitions(beacon PRIVATE
-        WIFI_SSID="$ENV{WIFI_SSID}"
-        WIFI_PASSWORD="$ENV{WIFI_PASSWORD}"
+#        WIFI_SSID="$ENV{WIFI_SSID}"
+#        WIFI_PASSWORD="$ENV{WIFI_PASSWORD}"
+        LWIP_DNS_SUPPORT_MDNS_QUERIES=1
         )
 
 # target_compile_options(beacon PRIVATE -Wall)
