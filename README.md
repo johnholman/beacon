@@ -1,8 +1,9 @@
 Beacon - firmware for an IR emitting beacon that supports distance estimation by the Vishay TSSP58P38 IR proximity sensor
 
-Version 0.8, 14 June 25
- 
- At startup, the beacon connects to the broker and publishes with topic beacon/announce and payload its flash memory serial number.
+Version 1.0, 25 June 25
+
+At startup, the beacon scans for wifi information and if present selects one with SSID hnet2 or ap2, in that order of
+preference. It connects to that network, makes an mDNS request for "broker.local" to get the broker IP address. It then connects to the broker and publishes a message with topic beacon/announce and payload its flash memory serial number.
 
  A beacon command is communicated as the payload of an MQTT message on topic beacon/\<s> where s is either the beacon's flash
  memory serial number or the "public id" given as the parameter of a previous "i" command.
@@ -11,15 +12,15 @@ Version 0.8, 14 June 25
  
  The following commands are supported:
 
- i\<id> - set public id to \<id>. The beacon subscribes to topic <id> where is is a (shortish) string
+ i<id> - set public id to <id>. The beacon subscribes to topic <id> where is is a (shortish) string
 
  n - continuous mode off.  The beacon transmits only in response to the f command (default)
 
  c - continuous mode on. The beacon transmits a continuous series of flashes
 
- f\<n> - send a single flash accompanied by data \<n>, where n is the number of short bursts in the flash
+ f<n> - send a single flash accompanied by data <n>, where n is the number of short bursts in the flash
 
- d\<n> - set the data to be sent when in continuous mode  Default is 0. Overridden by any subsequent f
+ d<n> - set the data to be sent when in continuous mode  Default is 0. Overridden by any subsequent f
  command.
 
 Example test session:

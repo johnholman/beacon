@@ -14,6 +14,8 @@ endif()
 # ====================================================================================
 # CMakeLists.txt for pico beacon firmware
 
+set(FIRMWARE_VERSION "1.0, 25 Jun 2025")
+
 cmake_minimum_required(VERSION 3.13)
 
 set(PICO_BOARD "pico_w" CACHE STRING "Board Type")
@@ -47,9 +49,8 @@ target_link_libraries(beacon PRIVATE
         )
 
 target_compile_definitions(beacon PRIVATE
-#        WIFI_SSID="$ENV{WIFI_SSID}"
-#        WIFI_PASSWORD="$ENV{WIFI_PASSWORD}"
         LWIP_DNS_SUPPORT_MDNS_QUERIES=1
+        FIRMWARE_VERSION="${FIRMWARE_VERSION}"
         )
 
 # target_compile_options(beacon PRIVATE -Wall)
@@ -62,6 +63,6 @@ pico_enable_stdio_usb(beacon 1)
 pico_add_extra_outputs(beacon)
 
 pico_set_program_name(beacon "beacon")
-pico_set_program_version(beacon "1.0")
+pico_set_program_version(beacon "${FIRMWARE_VERSION}")
 
 

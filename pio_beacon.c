@@ -13,7 +13,8 @@
  *                  - add parameter to flash command to specify accompanying data
  * 0.7, 24 Mar 24   - minor tidying, set QOS to 0 (was 2)
  * 0.8, 14 Jun 25   - update to SDK 2.1.1 and improve CMakeLists.txt
- * 1.0, 23 Jun 25   - support multiple wifi networks and pick the best available
+ * 1.0, 25 Jun 25   - support multiple wifi networks and pick the best available
+ *                  - do mDNS lookup for "broker.local" to find the broker's IP address
  */
 
 #include <stdio.h>
@@ -32,7 +33,7 @@
 #include "lwip/inet.h"
 #include "lwip/apps/mqtt_priv.h"
 #include "lwip/apps/mqtt.h"
-#include "lwip/dns.h"
+// #include "lwip/dns.h"
 
 #include "wifi_scan.h"
 #include "dns_lookup.h"
@@ -51,7 +52,6 @@
 #define STATUS_GPIO 17
 
 mqtt_client_t client;
-bool connected = false;
 
 bool continuous = false; // default is to transmit only when flash command received
 uint8_t nshort = 0;      //  without any short pulses
@@ -148,19 +148,35 @@ static void msg_data_cb(void *arg, const u8_t *data, u16_t len, u8_t flags)
   }
 }
 
+// indicator for connection status
+typedef enum
+{
+  STATUS_IDLE,        // No current connection attempt
+  STATUS_IN_PROGRESS, // Connection request made, waiting for callback
+  STATUS_CONNECTED,   // Connection made
+  STATUS_FAILED       // Connection failed
+} connection_status_t;
+
+connection_status_t connection_status = STATUS_IDLE;
+
+/* MQTT connection callback
+
+If connection successful, sets status indicator to STATUS_CONNECTED
+and subscribes to this beacon's personal topic "beacon/<id>"
+If connection unsuccessful, sets status indicator to STATUS_FAILED
+*/
 static void mqtt_connection_cb(mqtt_client_t *client, void *id, mqtt_connection_status_t status)
 {
-  // err_t err;
-  if (status == MQTT_CONNECT_ACCEPTED)
-  {
-    printf("mqtt_connection_cb: Successfully connected with arg %s\n", id);
-    connected = true;
-  }
-  else
+
+  // connection attempt failed so print reason and return
+  if (status != MQTT_CONNECT_ACCEPTED)
   {
     printf("mqtt_connection_cb: Disconnected, reason: %d\n", status);
+    connection_status = STATUS_FAILED;
     return;
   }
+  printf("mqtt_connection_cb: Successfully connected with arg %s\n", id);
+  connection_status = STATUS_CONNECTED;
 
   /* Setup callback for incoming publish requests */
   mqtt_set_inpub_callback(client, msg_info_cb, msg_data_cb, "");
@@ -170,9 +186,12 @@ static void mqtt_connection_cb(mqtt_client_t *client, void *id, mqtt_connection_
   subscribe(topic);
 }
 
-void connect_broker(mqtt_client_t *client, ip_addr_t *ip_addr, char *id)
-{
+/* connect to broker with given ip address and client id to use
 
+Blocks until connection outcome is known, returning 0 success or -1 on failure
+*/
+int connect_broker(mqtt_client_t *client, ip_addr_t *ip_addr, char *id)
+{
   struct mqtt_connect_client_info_t ci;
   err_t err;
 
@@ -189,27 +208,36 @@ void connect_broker(mqtt_client_t *client, ip_addr_t *ip_addr, char *id)
   ci.will_msg = "shut down";
   ci.keep_alive = 60;
 
-  /* Initiate client and connect to server, if this fails immediately an error code is returned
-   otherwise mqtt_connection_cb will be called with connection result after attempting
-   to establish a connection with the server.
-   For now MQTT version 3.1.1 is always used */
-
-  // ip_addr_t ip_addr;
-  // ipaddr_aton(broker_ip, &ip_addr);
-
-  // wrapping for safety but might not be needed
+  // wrapping for safety
   cyw43_arch_lwip_begin();
   err = mqtt_client_connect(client, ip_addr, MQTT_PORT, mqtt_connection_cb, id, &ci);
   cyw43_arch_lwip_end();
 
-  /* For now just print the result code if something goes wrong without retrying */
+  /* return with error if the request fails */
   if (err != ERR_OK)
   {
     printf("mqtt_connect request failed with error %d\n", err);
+    return -1;
   }
-  else
+
+  connection_status = STATUS_IN_PROGRESS;
+  while (true)
   {
-    printf("mqtt_connect request returned OK\n");
+    switch (connection_status)
+    {
+    case STATUS_CONNECTED:
+      connection_status = STATUS_IDLE;
+      return 0;
+
+    case STATUS_FAILED:
+      connection_status = STATUS_IDLE;
+      return -1;
+
+    case STATUS_IN_PROGRESS:
+      puts("not yet connected");
+      sleep_ms(500);
+      break;
+    }
   }
 }
 
@@ -253,7 +281,7 @@ int main()
 
   sleep_ms(1000);
 
-  puts("beacon v1.0, 23 Jun 25");
+  printf("beacon firmware v. %s\n", FIRMWARE_VERSION);
 
   uint8_t iid[8];
   flash_get_unique_id(iid);
@@ -275,8 +303,7 @@ int main()
 
   if (cyw43_arch_init())
   {
-    printf("failed to initialise\n");
-    return 1;
+    panic("failed to initialise CMY43");
   }
 
   cyw43_arch_enable_sta_mode();
@@ -288,46 +315,39 @@ int main()
   }
   else
   {
-    printf("candidate wifi network not found\n");
+    panic("candidate wifi network not found\n");
   }
 
   char *id;
   printf("Connecting to Wi-Fi...\n");
   if (cyw43_arch_wifi_connect_timeout_ms(netinfo->ssid, netinfo->password, CYW43_AUTH_WPA2_AES_PSK, 30000))
   {
-    printf("failed to connect.\n");
-    return 1;
+    panic("failed to connect.\n");
   }
   else
   {
     printf("Connected.\n");
     printf("IP address: %s\n", ip4addr_ntoa(netif_ip4_addr(netif_list)));
-    id = strrchr(ip4addr_ntoa(netif_ip4_addr(netif_list)), '.');
-    id++;
-    printf("old ID: %s\n", id);
   }
 
-    const char *broker_name = "gl-mt3000.local";
-    static ip_addr_t broker_ip; // IP address of broker
-    int err = dns_lookup(broker_name, &broker_ip);
+  const char *broker_name = "broker.local";
+  static ip_addr_t broker_ip; // IP address of broker
+  int err = dns_lookup(broker_name, &broker_ip);
 
-    if (err)
-    {
-        printf("lookup of %s failed\n", broker_name);
-    }
-    else
-    {
-        printf("%s resolved to address %s\n", broker_name, ipaddr_ntoa(&broker_ip));
-    }
-
-  connect_broker(&client, &broker_ip, internal_id);
-
-  for (;;)
+  if (err)
   {
-    if (connected)
-      break;
-    puts("not yet connected");
-    sleep_ms(1000);
+    panic("broker lookup of %s failed\n", broker_name);
+  }
+  else
+  {
+    printf("%s resolved to address %s\n", broker_name, ipaddr_ntoa(&broker_ip));
+  }
+
+  err = connect_broker(&client, &broker_ip, internal_id);
+
+  if (err)
+  {
+    panic("broker connection failed, terminating");
   }
 
   publish(&client, "beacon/announce", internal_id);
