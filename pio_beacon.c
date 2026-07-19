@@ -15,7 +15,8 @@
  * 0.8, 14 Jun 25   - update to SDK 2.1.1 and improve CMakeLists.txt
  * 1.0, 25 Jun 25   - support multiple wifi networks and pick the best available
  *                  - do mDNS lookup for "broker.local" to find the broker's IP address
- * 1.1, 26 Jun 26   - switch to using pico_get_unique_board_id_string() for the unique id
+ * 1.1, 19 Jun 26   - switch to using pico_get_unique_board_id_string() for the unique id
+ *                  - beacon status messages changed to support environment manager/beacon decoupling          
  */
 
 #include <stdio.h>
@@ -191,30 +192,36 @@ static void mqtt_connection_cb(mqtt_client_t *client, void *id, mqtt_connection_
 
 Blocks until connection outcome is known, returning 0 success or -1 on failure
 */
-int connect_broker(mqtt_client_t *client, ip_addr_t *ip_addr, char *id)
+int connect_broker(mqtt_client_t *client, ip_addr_t *ip_addr, char *uid)
 {
   struct mqtt_connect_client_info_t ci;
   err_t err;
 
-  /* Setup an empty client info structure */
+  // Setup an empty client info structure
   memset(&ci, 0, sizeof(ci));
 
-  /* Set client name to beacon-N where N is the flash serial number */
+  // Set client name to beacon-N where N is the board unique id
   char client_name[30];
-  snprintf(client_name, sizeof(client_name), "beacon-%s", id);
+  snprintf(client_name, sizeof(client_name), "beacon-%s", uid);
   printf("client name: %s\n", client_name);
-
   ci.client_id = client_name;
-  ci.will_topic = "beacon/announce";
-  ci.will_msg = "shut down";
-  ci.keep_alive = 60;
+
+  // set topic to beacon/status/<uid> and payload to down
+  char topic[32];
+  snprintf(topic, sizeof(topic), "beacon/status/%s", uid);
+  ci.will_topic = topic;
+  ci.will_msg = "down";
+
+  // set as retained message with keep alive of 10s
+  ci.will_retain = 1;
+  ci.keep_alive = 10;
 
   // wrapping for safety
   cyw43_arch_lwip_begin();
-  err = mqtt_client_connect(client, ip_addr, MQTT_PORT, mqtt_connection_cb, id, &ci);
+  err = mqtt_client_connect(client, ip_addr, MQTT_PORT, mqtt_connection_cb, uid, &ci);
   cyw43_arch_lwip_end();
 
-  /* return with error if the request fails */
+  // return with error if the request fails
   if (err != ERR_OK)
   {
     printf("mqtt_connect request failed with error %d\n", err);
@@ -259,7 +266,7 @@ void publish(mqtt_client_t *client, char *topic, char *msg)
 {
   err_t err;
   u8_t qos = 0; /* 0 1 or 2, see MQTT specification */
-  u8_t retain = 0;
+  u8_t retain = 1;  // messages published by the beacon are retained status messages
 
   printf("publishing %s on topic %s\n", msg, topic);
   // definitely do need to wrap here!
@@ -355,7 +362,11 @@ int main()
     panic("broker connection failed, terminating");
   }
 
-  publish(&client, "beacon/announce", uid);
+  char topic[32];
+  snprintf(topic, sizeof(topic), "beacon/status/%s", uid);
+  publish(&client, topic, "up");
+
+  // publish(&client, "beacon/", uid);
 
   // use the first PIO block
   PIO pio = pio0;
