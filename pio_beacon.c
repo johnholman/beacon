@@ -15,6 +15,7 @@
  * 0.8, 14 Jun 25   - update to SDK 2.1.1 and improve CMakeLists.txt
  * 1.0, 25 Jun 25   - support multiple wifi networks and pick the best available
  *                  - do mDNS lookup for "broker.local" to find the broker's IP address
+ * 1.1, 26 Jun 26   - switch to using pico_get_unique_board_id_string() for the unique id
  */
 
 #include <stdio.h>
@@ -22,7 +23,7 @@
 #include "hardware/pio.h"
 #include "pio_beacon.pio.h"
 #include "hardware/clocks.h"
-#include "hardware/flash.h"
+#include "pico/unique_id.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -283,12 +284,16 @@ int main()
 
   printf("beacon firmware v. %s\n", FIRMWARE_VERSION);
 
-  uint8_t iid[8];
-  flash_get_unique_id(iid);
-  snprintf(internal_id, sizeof(internal_id), "%llx", *(uint64_t *)iid);
+  char uid[17];
+  pico_get_unique_board_id_string(uid, sizeof(uid));
+  printf("board uid %s\n", uid);
+
+  // uint8_t iid[8];
+  // flash_get_unique_id(iid);
+  // snprintf(internal_id, sizeof(internal_id), "%llx", *(uint64_t *)iid);
 
   // internal_id = *(uint64_t *)iid;
-  printf("flash memory uid %s\n", internal_id);
+  // printf("flash memory uid %s\n", internal_id);
 
   // configure pin to reflect whether in continuous mode
   gpio_init(STATUS_GPIO);
@@ -343,14 +348,14 @@ int main()
     printf("%s resolved to address %s\n", broker_name, ipaddr_ntoa(&broker_ip));
   }
 
-  err = connect_broker(&client, &broker_ip, internal_id);
+  err = connect_broker(&client, &broker_ip, uid);
 
   if (err)
   {
     panic("broker connection failed, terminating");
   }
 
-  publish(&client, "beacon/announce", internal_id);
+  publish(&client, "beacon/announce", uid);
 
   // use the first PIO block
   PIO pio = pio0;

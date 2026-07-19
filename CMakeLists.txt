@@ -4,9 +4,9 @@ if(WIN32)
 else()
     set(USERHOME $ENV{HOME})
 endif()
-set(sdkVersion 2.1.1)
+set(sdkVersion 2.3.0)
 set(toolchainVersion 13_2_Rel1)
-set(picotoolVersion 2.1.1)
+set(picotoolVersion 2.3.0)
 set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
 if (EXISTS ${picoVscode})
     include(${picoVscode})
@@ -14,7 +14,7 @@ endif()
 # ====================================================================================
 # CMakeLists.txt for pico beacon firmware
 
-set(FIRMWARE_VERSION "1.0, 25 Jun 2025")
+set(FIRMWARE_VERSION "1.1, 19 July 2016")
 
 cmake_minimum_required(VERSION 3.13)
 
@@ -44,8 +44,8 @@ target_link_libraries(beacon PRIVATE
         pico_stdlib
         pico_cyw43_arch_lwip_threadsafe_background
         pico_lwip_mqtt
+        pico_unique_id
         hardware_pio
-        hardware_flash
         )
 
 target_compile_definitions(beacon PRIVATE
